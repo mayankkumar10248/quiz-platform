@@ -1,5 +1,6 @@
  require("dotenv").config();
 
+const aiRoutes = require("./routes/aiRoutes");
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use("/api/test", testRoutes);
 app.use("/api/subjects", subjectRoutes);
 app.use("/api/quizzes", quizRoutes);
+app.use("/api/ai", aiRoutes);
 
 // MongoDB Atlas connection
 mongoose

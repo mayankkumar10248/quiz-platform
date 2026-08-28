@@ -27,7 +27,6 @@ const generateQuiz = async (req, res) => {
       20
     );
 
-    // Find subject
     const subject = await Subject.findById(subjectId);
 
     if (!subject) {
@@ -41,115 +40,106 @@ const generateQuiz = async (req, res) => {
       `Generating ${questionCount} ${difficulty} questions for ${subject.name} - ${topic}`
     );
 
-    // Ask Groq AI
     const completion = await groq.chat.completions.create({
       model: "openai/gpt-oss-20b",
 
       messages: [
         {
           role: "system",
-          content:
-            "You are an expert educational quiz generator. Generate accurate multiple-choice questions for students.",
+          content: `You are an expert educational quiz generator.
+
+You MUST return ONLY valid JSON.
+Do not include markdown.
+Do not include explanations outside the JSON.
+Do not use code fences.
+
+The JSON must have exactly this structure:
+
+{
+  "questions": [
+    {
+      "question": "question text",
+      "options": [
+        "option 1",
+        "option 2",
+        "option 3",
+        "option 4"
+      ],
+      "correctAnswer": "one of the four options"
+    }
+  ]
+}`,
         },
+
         {
           role: "user",
-          content: `
-Create a ${difficulty} difficulty quiz.
+          content: `Create a ${difficulty} difficulty quiz.
 
 Subject: ${subject.name}
 Topic: ${topic}
 
-Generate exactly ${questionCount} multiple-choice questions.
+Generate exactly ${questionCount} questions.
 
 Rules:
+- Generate exactly ${questionCount} questions.
 - Every question must have exactly 4 options.
 - Only one option must be correct.
 - correctAnswer must exactly match one of the four options.
 - Questions must be factually accurate.
 - Do not repeat questions.
 - Keep questions clear and suitable for students.
-          `,
+
+Return ONLY valid JSON.`,
         },
       ],
-
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "quiz_questions",
-          strict: true,
-
-          schema: {
-            type: "object",
-
-            properties: {
-              questions: {
-                type: "array",
-
-                items: {
-                  type: "object",
-
-                  properties: {
-                    question: {
-                      type: "string",
-                    },
-
-                    options: {
-                      type: "array",
-
-                      items: {
-                        type: "string",
-                      },
-
-                      minItems: 4,
-                      maxItems: 4,
-                    },
-
-                    correctAnswer: {
-                      type: "string",
-                    },
-                  },
-
-                  required: [
-                    "question",
-                    "options",
-                    "correctAnswer",
-                  ],
-
-                  additionalProperties: false,
-                },
-              },
-            },
-
-            required: ["questions"],
-            additionalProperties: false,
-          },
-        },
-      },
     });
 
-    // Get AI response
-    const content =
-      completion.choices[0]?.message?.content;
+    const content = completion.choices[0]?.message?.content;
 
     if (!content) {
       throw new Error("Groq returned an empty response");
     }
 
-    const aiData = JSON.parse(content);
+    console.log("RAW GROQ RESPONSE:");
+    console.log(content);
+
+    let aiData;
+
+    try {
+      aiData = JSON.parse(content);
+    } catch (parseError) {
+      console.error("JSON PARSE ERROR:", parseError);
+      throw new Error("Groq returned invalid JSON");
+    }
 
     const questions = aiData.questions;
 
-    // Validate AI result
     if (
       !Array.isArray(questions) ||
       questions.length !== questionCount
     ) {
       throw new Error(
-        "AI returned an invalid number of questions"
+        `AI returned ${questions?.length || 0} questions instead of ${questionCount}`
       );
     }
 
-    // Save quiz to MongoDB
+    for (const question of questions) {
+      if (
+        !question.question ||
+        !Array.isArray(question.options) ||
+        question.options.length !== 4 ||
+        !question.correctAnswer
+      ) {
+        throw new Error("AI returned an invalid question format");
+      }
+
+      if (!question.options.includes(question.correctAnswer)) {
+        throw new Error(
+          "correctAnswer does not match any option"
+        );
+      }
+    }
+
     const quiz = await Quiz.create({
       title: `${topic} Quiz`,
       subject: subjectId,
@@ -160,7 +150,6 @@ Rules:
 
     console.log("AI quiz saved to MongoDB");
 
-    // Return quiz
     res.status(201).json({
       success: true,
       message: "Quiz generated successfully",

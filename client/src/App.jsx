@@ -1,7 +1,7 @@
  import { useEffect, useState } from "react";
 import "./index.css";
 
-const API_URL = "http://localhost:5000/api/subjects";
+const API_URL = "https://quiz-platform-api-c5qf.onrender.com/api/subjects";
 const AI_API_URL = "http://localhost:5000/api/ai/generate";
 const SUBMIT_API_URL = "http://localhost:5000/api/quizzes";
 
